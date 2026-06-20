@@ -142,6 +142,23 @@ RANKS = [
     (10000, "👑 Just See Legend"),
 ]
 
+GOAL_AMOUNT = 1_000_000  # рублей
+AVG_PROJECT = 80_000     # средний чек клипа
+
+HOURLY_PINGS = [
+    "Эй, босс 👋 Как дела? Что по задачам?",
+    "Час прошёл ⏱ Заглянул проверить — всё идёт по плану?",
+    "Just See не спит 👀 Задачи двигаются?",
+    "Привет! Напоминаю — у тебя сегодня дела. Как успехи?",
+    "Дружеский пинг 🏓 Что сделано за последний час?",
+]
+
+ALL_DONE_MESSAGES = [
+    "🎉 НА СЕГОДНЯ ДЕЛ БОЛЬШЕ НЕТ!\n\nСпасибо за крутой день, босс 🤝\nJust See растёт именно так — день за днём.",
+    "💥 ВСЁ ЗАКРЫТО!\n\nТы сделал всё что надо. Спасибо за крутой день, босс 👊\nЭто и есть путь к миллиону.",
+    "🏆 ДЕНЬ ЗАКРЫТ ЧИСТО!\n\nНа сегодня всё, босс. Серьёзный человек — серьёзный результат 🔥",
+]
+
 MORNING_QUOTES = [
     "Продакшены не строятся пока ты спишь. Но план уже готов 💪",
     "Клиенты не придут сами. Зато 3 задачи сегодня приблизят тебя к этому.",
@@ -529,6 +546,7 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         mask[idx] = not mask[idx]
         data["tasks_done"][key] = mask
         done_count = sum(1 for d in mask if d)
+        all_done = done_count == total
 
         if mask[idx]:
             xp_gain = XP_PER_TASK
@@ -536,7 +554,7 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             data["total_tasks_done"] = data.get("total_tasks_done", 0) + 1
             rank = get_rank(data["xp"])
             feedback = f"✅ +{xp_gain} XP! Всего: {data['xp']} | {rank}"
-            if done_count == total:
+            if all_done:
                 data["streak"] = data.get("streak", 0) + 1
                 bonus = data["streak"] * STREAK_BONUS
                 data["xp"] += bonus
@@ -547,11 +565,42 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             feedback = f"↩️ Отменено. XP: {data['xp']}"
 
         save_data(data)
-        header = f"📋 <b>{day['d']} — {day['theme']}</b>\n{feedback}\nВыполнено: {done_count}/{total}\n"
+
+        # Показываем что осталось сделать
+        remaining = [day["tasks"][i] for i in range(total) if i >= len(mask) or not mask[i]]
+        if remaining and not all_done:
+            remaining_text = "\n\n📌 <b>Осталось сегодня:</b>\n" + "\n".join(f"• {t}" for t in remaining)
+        else:
+            remaining_text = ""
+
+        header = f"📋 <b>{day['d']} — {day['theme']}</b>\n{feedback}\nВыполнено: {done_count}/{total}{remaining_text}\n"
         try:
             await query.edit_message_text(header, parse_mode="HTML", reply_markup=build_tasks_keyboard(data))
         except Exception:
             pass
+
+        # Если все задачи закрыты — отправляем отдельное сообщение с праздником
+        if all_done and mask[idx]:
+            import random
+            total_done_all = data.get("total_tasks_done", 0)
+            total_possible = len(PLAN) * 3
+            days_left = len(PLAN) - data["current_day"] - 1
+            projects_closed = total_done_all // 9  # грубая оценка
+            revenue_est = projects_closed * AVG_PROJECT
+            to_goal = max(0, GOAL_AMOUNT - revenue_est)
+            projects_to_goal = -(-to_goal // AVG_PROJECT)  # ceiling division
+
+            celebration = random.choice(ALL_DONE_MESSAGES)
+            stats = (
+                f"\n\n📊 <b>Статистика к цели:</b>\n"
+                f"🎯 Цель: <b>1 000 000 ₽</b> за 60 дней\n"
+                f"✅ Задач закрыто всего: <b>{total_done_all}</b> из {total_possible}\n"
+                f"📅 Дней пройдено: <b>{data['current_day'] + 1}/60</b>\n"
+                f"💰 Расчётная выручка: ~<b>{revenue_est:,} ₽</b>\n"
+                f"🏁 До цели осталось: ~<b>{to_goal:,} ₽</b> ({projects_to_goal} проектов)\n"
+                f"⚡ XP: <b>{data['xp']}</b> | 🔥 Стрик: <b>{data['streak']} дней</b>"
+            )
+            await query.message.reply_text(celebration + stats, parse_mode="HTML")
 
     elif query.data == "progress":
         xp = data.get("xp", 0)
@@ -563,7 +612,36 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.answer(text, show_alert=True)
 
 
-def main():
+async def send_hourly_ping(app, chat_id):
+    data = load_data()
+    if not data["started"]:
+        return
+    done_mask = get_done_mask(data)
+    day = get_today_tasks(data)
+    if not day:
+        return
+    total = len(day["tasks"])
+    done_count = sum(1 for d in done_mask if d)
+    if done_count == total:
+        return  # все задачи уже закрыты — не беспокоим
+
+    import random
+    ping = random.choice(HOURLY_PINGS)
+    remaining = [day["tasks"][i] for i in range(total) if i >= len(done_mask) or not done_mask[i]]
+    remaining_text = "\n".join(f"• {t}" for t in remaining)
+
+    text = (
+        f"{ping}\n\n"
+        f"📋 Осталось сегодня ({len(remaining)}/{total}):\n{remaining_text}"
+    )
+    await app.bot.send_message(
+        chat_id=chat_id, text=text,
+        parse_mode="HTML",
+        reply_markup=build_tasks_keyboard(data)
+    )
+
+
+
     if not TOKEN:
         print("Установи BOT_TOKEN в переменных окружения")
         return
@@ -585,9 +663,17 @@ def main():
                       args=[app, OWNER_ID])
     scheduler.add_job(send_evening_report, "cron", hour=21, minute=0,
                       args=[app, OWNER_ID])
+    scheduler.add_job(send_hourly_ping, "cron",
+                      hour="10-20", minute=0,
+                      args=[app, OWNER_ID])
     scheduler.start()
 
     print("Бот запущен")
+    app.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+    main()
     app.run_polling(drop_pending_updates=True)
 
 
