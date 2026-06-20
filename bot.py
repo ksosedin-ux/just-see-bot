@@ -642,6 +642,7 @@ async def send_hourly_ping(app, chat_id):
 
 
 
+def main():
     if not TOKEN:
         print("Установи BOT_TOKEN в переменных окружения")
         return
@@ -669,11 +670,6 @@ async def send_hourly_ping(app, chat_id):
     scheduler.start()
 
     print("Бот запущен")
-    app.run_polling(drop_pending_updates=True)
-
-
-if __name__ == "__main__":
-    main()
     app.run_polling(drop_pending_updates=True)
 
 
