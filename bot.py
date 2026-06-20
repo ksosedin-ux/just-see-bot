@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     ContextTypes, MessageHandler, filters
@@ -97,6 +97,56 @@ DAILY_CHALLENGES = [
     {"type":"streak",  "text":"Начни день до 10:00 — открой бота утром",  "xp":100},
     {"type":"sales",   "text":"Добавь 3 новых контакта в базу",           "xp":100},
 ]
+
+# ─── КАРТОЧКИ ОБУЧЕНИЯ ───────────────────────────────────────────────────────
+LEARNING_CARDS = [
+    {"topic":"💼 Продажи","title":"Правило 48 часов","text":"После любого контакта с лидом — следующий шаг в течение 48 часов. Дольше = остываешь ты и он. Поставь напоминание сразу после звонка."},
+    {"topic":"💼 Продажи","title":"Продавай результат, не процесс","text":"Клиенту не важно сколько камер и какой монтаж. Ему важно: клип даст подписчиков, реклама даст продажи. Говори о результате первым."},
+    {"topic":"💼 Продажи","title":"Возражение — это вопрос","text":"'Дорого' = 'Не понимаю за что плачу'. 'Подумаю' = 'Не убедил'. Не спорь — уточняй: 'Что именно смущает?'"},
+    {"topic":"💼 Продажи","title":"Follow-up решает всё","text":"80% сделок закрываются после 5-го касания. Большинство сдаются после первого. Отправь второе письмо — ты уже впереди конкурентов."},
+    {"topic":"💼 Продажи","title":"Социальное доказательство","text":"Перед КП упомяни: 'Наш клип для артиста набрал 4.6М'. Один конкретный результат убеждает лучше любого описания услуг."},
+    {"topic":"💼 Продажи","title":"Цена — последней","text":"Называй цену только после того как клиент понял ценность. Порядок: результат → кейсы → процесс → цена. Не наоборот."},
+    {"topic":"💼 Продажи","title":"Дедлайн создаёт решение","text":"'Можем взять ваш проект на март' работает лучше чем 'когда удобно'. Мягкий дедлайн помогает клиенту принять решение."},
+    {"topic":"💼 Продажи","title":"Один вопрос после отказа","text":"Клиент отказал — спроси: 'Что должно было быть иначе чтобы вы согласились?' Это лучший источник знаний о рынке."},
+    {"topic":"📱 Маркетинг","title":"Контент = доверие заранее","text":"Клиент видит Reels → понимает как ты думаешь → приходит готовым. Контент продаёт пока ты снимаешь. 1 пост = 1 касание с рынком."},
+    {"topic":"📱 Маркетинг","title":"Первые 3 секунды решают","text":"Если не зацепил в начале Reels — не досмотрят. Начинай с конфликта, вопроса или неожиданного факта. Не с приветствия."},
+    {"topic":"📱 Маркетинг","title":"Ниша внутри ниши","text":"'Видеопродакшен' — широко. 'Клипы для артистов 50к+ подписчиков' — точно. Чем уже позиционирование, тем легче найти нужных клиентов."},
+    {"topic":"📱 Маркетинг","title":"Кейс сильнее рекламы","text":"Пост 'сняли клип → результат X' продаёт лучше любого рекламного текста. Документируй каждый проект: до/после, цифры, процесс."},
+    {"topic":"📱 Маркетинг","title":"BTS стоит 0 рублей","text":"За кулисами съёмки — контент который показывает экспертизу и стоит 0. Снимай телефоном прямо во время работы."},
+    {"topic":"🎬 Продакшен","title":"Бриф спасает проект","text":"90% конфликтов — несовпадение ожиданий. Подробный бриф до начала = меньше правок, быстрая сдача, довольный клиент."},
+    {"topic":"🎬 Продакшен","title":"Правки — не бесплатно","text":"Пропиши в договоре: 2 круга правок включены, далее почасовая оплата. Это защита твоего времени, не жадность."},
+    {"topic":"🎬 Продакшен","title":"Предоплата обязательна","text":"Минимум 50% до старта. Без предоплаты клиент не ценит твоё время и легко отменяет. Деньги = серьёзность."},
+    {"topic":"🎬 Продакшен","title":"Дедлайн с запасом","text":"Называй клиенту дедлайн на 3-5 дней позже реального. Сдашь раньше — выглядишь героем."},
+    {"topic":"🎬 Продакшен","title":"Сначала деньги, потом файлы","text":"Финальные файлы — только после полной оплаты. Всегда. Это стандарт индустрии, не недоверие."},
+    {"topic":"⚡ Эффективность","title":"Съедай лягушку утром","text":"Самая неприятная задача — первой. Пока энергия есть. Холодный звонок в 9:00 лучше чем в 18:00."},
+    {"topic":"⚡ Эффективность","title":"Один приоритет дня","text":"Если сделаю только одно — что это? Запиши утром. Всё остальное бонус. Фокус на главном даёт результат быстрее чем 10 задач по чуть-чуть."},
+    {"topic":"⚡ Эффективность","title":"Группируй похожие задачи","text":"Все звонки — один блок. Все письма — другой. Переключение между типами задач съедает до 40% времени."},
+    {"topic":"⚡ Эффективность","title":"Система важнее мотивации","text":"Мотивация кончается. Система — нет. Одно и то же каждый день в одно время — уже не усилие, а привычка."},
+    {"topic":"💰 Деньги","title":"Поднимай цены раз в полгода","text":"Ты растёшь — цены должны расти. +15-20% раз в 6 месяцев — норма. Клиенты которые уходят из-за цены — не твои клиенты."},
+    {"topic":"💰 Деньги","title":"Апселл проще нового клиента","text":"Продать доп. услугу клиенту в 7 раз проще чем найти нового. После сдачи: 'Хотите вертикальный формат для Stories?'"},
+    {"topic":"💰 Деньги","title":"Считай час своей работы","text":"Месячный доход ÷ рабочие часы = твоя ставка. Если задача стоит дешевле ставки — делегируй. Дороже — берись сам."},
+    {"topic":"💰 Деньги","title":"Подписка вместо разовых","text":"'2 клипа в месяц за фиксированную сумму' = стабильный доход. Один клиент на подписке = 12 проектов в год без поиска."},
+]
+
+# ─── ВОПРОСЫ РЕФЛЕКСИИ ───────────────────────────────────────────────────────
+REFLECTION_QUESTIONS = [
+    "Что на этой неделе сработало лучше всего в продажах или производстве?",
+    "Что не получилось — честно, без оправданий. Почему?",
+    "Какой урок недели изменит следующую неделю?",
+    "Что ты откладывал всю неделю и так и не сделал — почему?",
+    "Что одно ты сделаешь иначе на следующей неделе?",
+]
+
+
+# ─── ГЛАВНОЕ МЕНЮ ────────────────────────────────────────────────────────────
+def get_main_menu():
+    keyboard = [
+        [KeyboardButton("📋 Задачи"), KeyboardButton("📊 Прогресс"), KeyboardButton("💰 Финансы")],
+        [KeyboardButton("👥 CRM"), KeyboardButton("🎬 Проекты"), KeyboardButton("📱 Контент")],
+        [KeyboardButton("🏆 Достижения"), KeyboardButton("🎯 Цели"), KeyboardButton("📚 Учиться")],
+        [KeyboardButton("🌟 Победы"), KeyboardButton("⚡ Челлендж"), KeyboardButton("🪞 Рефлексия")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 MORNING_QUOTES = [
     "Продакшены не строятся пока ты спишь. Но план уже готов 💪",
@@ -352,6 +402,10 @@ async def send_morning_briefing(app, chat_id):
 
     # Утренний вопрос о фокусе
     quote = random.choice(MORNING_QUOTES)
+
+    # Карточка обучения
+    card = random.choice(LEARNING_CARDS)
+    learning_line = f"\n\n📚 <b>Карточка дня — {card['topic']}</b>\n<b>{card['title']}</b>\n{card['text']}"
     day_num = data["current_day"] + 1
     rank = get_rank(data["xp"])
     streak = data["streak"]
@@ -410,7 +464,8 @@ async def send_morning_briefing(app, chat_id):
         f"{urgent_line}"
         f"{content_line}\n\n"
         f"<b>Задачи на сегодня:</b>\n{tasks_text}\n\n"
-        f"⚡ <b>Челлендж дня:</b> {challenge['text']} (+{challenge['xp']} XP)\n\n"
+        f"⚡ <b>Челлендж дня:</b> {challenge['text']} (+{challenge['xp']} XP)"
+        f"{learning_line}\n\n"
         f"Отмечай по мере выполнения 👇"
     )
     save_data(data)
@@ -703,6 +758,50 @@ async def send_finance_weekly(app, chat_id):
     await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
 
 
+
+# ─── РЕФЛЕКСИЯ И ОБУЧЕНИЕ ────────────────────────────────────────────────────
+async def send_reflection(app, chat_id):
+    """Воскресная рефлексия — 5 вопросов по одному"""
+    data = load_data()
+    if not data["started"]:
+        return
+    await app.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "🪞 <b>Время рефлексии, босс</b>\n\n"
+            "Каждое воскресенье — 5 вопросов которые делают следующую неделю лучше.\n"
+            "Отвечай честно, коротко. Это только для тебя.\n\n"
+            "Сохраняю ответы в дневник — потом можно перечитать и увидеть рост."
+        ),
+        parse_mode="HTML"
+    )
+    data["reflection_pending"] = list(range(len(REFLECTION_QUESTIONS)))
+    data["reflection_answers"] = []
+    data["reflection_q_idx"] = 0
+    save_data(data)
+    await app.bot.send_message(
+        chat_id=chat_id,
+        text=f"❓ <b>Вопрос 1 из 5:</b>\n\n{REFLECTION_QUESTIONS[0]}",
+        parse_mode="HTML"
+    )
+
+
+async def send_learn_card(app, chat_id):
+    """Ежедневная карточка обучения (отдельная команда)"""
+    card = random.choice(LEARNING_CARDS)
+    text = (
+        f"📚 <b>{card['topic']} — {card['title']}</b>\n\n"
+        f"{card['text']}\n\n"
+        f"<i>Применить сегодня?</i>"
+    )
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Применю сегодня +50 XP", callback_data="learn_apply"),
+        InlineKeyboardButton("📖 Ещё карточку", callback_data="learn_next"),
+    ]])
+    await app.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=kb)
+
+
+
 # ─── КОМАНДЫ ─────────────────────────────────────────────────────────────────
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -741,7 +840,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/focus45 — 45 мин таймер\n\n"
         "Нажми /go чтобы начать 👇"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=get_main_menu())
 
 
 async def go_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -761,6 +860,7 @@ async def go_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         + "\n\nОтмечай задачи 👇"
     )
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=build_tasks_keyboard(data))
+    await update.message.reply_text("Меню всегда под рукой 👇", reply_markup=get_main_menu())
 
 
 async def tasks_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1040,6 +1140,24 @@ async def goals_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=kb)
 
 
+
+async def menu_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📱 <b>Just See — главное меню</b>",
+        parse_mode="HTML",
+        reply_markup=get_main_menu()
+    )
+
+
+async def learn_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await send_learn_card(ctx.application, update.effective_chat.id)
+
+
+async def reflect_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await send_reflection(ctx.application, update.effective_chat.id)
+
+
+
 # ─── ТЕКСТОВЫЕ БЫСТРЫЕ КОМАНДЫ ───────────────────────────────────────────────
 async def text_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -1146,6 +1264,64 @@ async def text_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"🎯 Цели на неделю записаны ({len(goals)} шт.):\n" + "\n".join(f"• {g}" for g in goals),
             parse_mode="HTML")
+
+    # РЕФЛЕКСИЯ — обрабатываем ответы по одному
+    elif data.get("reflection_q_idx") is not None and data.get("reflection_pending") is not None:
+        q_idx = data.get("reflection_q_idx", 0)
+        answers = data.get("reflection_answers", [])
+        answers.append({"q": REFLECTION_QUESTIONS[q_idx], "a": text,
+                        "date": datetime.now().strftime("%Y-%m-%d")})
+        data["reflection_answers"] = answers
+        q_idx += 1
+        data["reflection_q_idx"] = q_idx
+        if q_idx < len(REFLECTION_QUESTIONS):
+            save_data(data)
+            await update.message.reply_text(
+                f"❓ <b>Вопрос {q_idx+1} из 5:</b>\n\n{REFLECTION_QUESTIONS[q_idx]}",
+                parse_mode="HTML")
+        else:
+            # Сохраняем в историю рефлексий
+            reflections = data.get("reflections", [])
+            reflections.append({
+                "week": datetime.now().strftime("%Y-W%W"),
+                "answers": answers
+            })
+            data["reflections"] = reflections
+            data["reflection_q_idx"] = None
+            data["reflection_pending"] = None
+            data["reflection_answers"] = []
+            data["xp"] = data.get("xp", 0) + 200
+            save_data(data)
+            await update.message.reply_text(
+                f"✅ <b>Рефлексия завершена!</b>\n\n+200 XP 🧠\n\nОтветы сохранены. Перечитай их в следующее воскресенье — увидишь прогресс.\n\n/reflect_history — история прошлых рефлексий",
+                parse_mode="HTML")
+
+    # КНОПКИ МЕНЮ
+    elif text == "📋 Задачи":
+        await tasks_command(update, ctx)
+    elif text == "📊 Прогресс":
+        await progress_command(update, ctx)
+    elif text == "💰 Финансы":
+        await finance_command(update, ctx)
+    elif text == "👥 CRM":
+        await crm_command(update, ctx)
+    elif text == "🎬 Проекты":
+        await projects_command(update, ctx)
+    elif text == "📱 Контент":
+        await content_command(update, ctx)
+    elif text == "🏆 Достижения":
+        await achievements_command(update, ctx)
+    elif text == "🎯 Цели":
+        await goals_command(update, ctx)
+    elif text == "📚 Учиться":
+        await learn_command(update, ctx)
+    elif text == "🌟 Победы":
+        await wins_command(update, ctx)
+    elif text == "⚡ Челлендж":
+        await challenge_command(update, ctx)
+    elif text == "🪞 Рефлексия":
+        await reflect_command(update, ctx)
+
 
 
 # ─── CALLBACK КНОПКИ ─────────────────────────────────────────────────────────
@@ -1277,6 +1453,41 @@ async def button_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             save_data(data)
             await query.answer(f"✅ Цель выполнена! +200 XP", show_alert=True)
 
+    # Карточка обучения
+    elif query.data == "learn_apply":
+        data["xp"] = data.get("xp", 0) + 50
+        save_data(data)
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.answer("✅ +50 XP! Применяй и результат придёт.", show_alert=True)
+
+    elif query.data == "learn_next":
+        card = random.choice(LEARNING_CARDS)
+        text = (
+            f"📚 <b>{card['topic']} — {card['title']}</b>\n\n"
+            f"{card['text']}\n\n"
+            f"<i>Применить сегодня?</i>"
+        )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Применю сегодня +50 XP", callback_data="learn_apply"),
+            InlineKeyboardButton("📖 Ещё карточку", callback_data="learn_next"),
+        ]])
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+
+async def reflect_history_command(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    data = load_data()
+    reflections = data.get("reflections", [])
+    if not reflections:
+        await update.message.reply_text("Рефлексий пока нет. Первая — в воскресенье вечером, или /reflect прямо сейчас.")
+        return
+    last = reflections[-1]
+    lines = [f"🪞 <b>Рефлексия {last['week']}</b>\n"]
+    for i, ans in enumerate(last.get("answers", [])):
+        lines.append(f"<b>Q{i+1}:</b> {ans['q']}")
+        lines.append(f"<b>A:</b> {ans['a']}\n")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
 
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 def main():
@@ -1306,6 +1517,10 @@ def main():
     app.add_handler(CommandHandler("projects", projects_command))
     app.add_handler(CommandHandler("content", content_command))
     app.add_handler(CommandHandler("goals", goals_command))
+    app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CommandHandler("learn", learn_command))
+    app.add_handler(CommandHandler("reflect", reflect_command))
+    app.add_handler(CommandHandler("reflect_history", reflect_history_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
@@ -1316,6 +1531,7 @@ def main():
     scheduler.add_job(send_hourly_ping, "cron", hour="10-20", minute=0, args=[app, OWNER_ID])
     scheduler.add_job(send_weekly_report, "cron", day_of_week="sun", hour=20, minute=0, args=[app, OWNER_ID])
     scheduler.add_job(send_finance_weekly, "cron", day_of_week="sun", hour=20, minute=30, args=[app, OWNER_ID])
+    scheduler.add_job(send_reflection, "cron", day_of_week="sun", hour=21, minute=0, args=[app, OWNER_ID])
     scheduler.start()
 
     print("Just See Bot запущен 🚀")
